@@ -13,34 +13,87 @@ cd "$project_dir"
 
 includes="$(echo "$(strip_comments "$src_file")" | sed -nr 's/^#include <(.+)>$/\1/p')"
 
+#####################################################################################################
+#declare maps that indicate which headers, libraries and directories are used
+
+declare -A hh_included
+while read -r hh; do
+	hh_included["$hh"]=0
+done <<< "$includes"
+
+declare -A include_dir_used
+while read -r Idir; do
+	include_dir_used["$Idir"]=0
+done < "includes"
+
+declare -A lib_files
+while read -r lib; do
+	lib_files["${lib%.*}"]=0
+done <<< "$includes"
+
+declare -A lib_dir_used
+while read -r Ldir; do
+	lib_dir_used["$Ldir"]=0
+done < "libs"
+
+#####################################################################################################
+#determine which include / lib directories are needed and which headers / libraries are found in them
+
+while read -r Idir; do
+	while read -r hh; do
+		hits="$(find "$Idir" -name "$hh")"
+		if [ "$hits" != "" ]; then
+			if [ $(wc -l <<< "$hits") -eq 1 ] && [ ${hh_included["$hh"]} -eq 0 ]; then
+				include_dir_used["$Idir"]=1
+				hh_included["$hh"]=1
+			else
+				echo "Error: multiple headers '$hh' found"
+				exit 1
+			fi
+		fi
+	done <<< "$includes"
+done < "includes"
+
+while read -r Ldir; do
+	while read -r lib; do
+		libstem="${lib%.*}"
+		hits="$(find "$Ldir" -regextype posix-extended -regex '.*/(lib)?'"$libstem"'[.](o|so|a)')"
+		if [ "$hits" != "" ]; then
+			if [ $(wc -l <<< "$hits") -eq 1 ] && [ "${lib_files["$libstem"]}" == "0" ]; then
+				lib_dir_used["$Ldir"]=1
+				lib_files["$libstem"]="${hits##*/}"
+			else
+				echo "Error: multiple libraries '$libstem' found"
+				exit 1
+			fi
+		fi
+	done <<< "$includes"
+done < "libs"
+
+#####################################################################################################
+#assemble options -I -L -l to be passed to the compiler
+
 Is=""
 Ls=""
 libs=""
 
-if [ -f "includes" ]; then
-	while read -r include_dir; do
-		while read -r hh; do
-			hits=$(find "$include_dir" -name "$hh")
-			if [ "$hits" != "" ] && [ $(echo "$hits" | wc -l) -eq 1 ]; then
-				Is="$Is -I${include_dir}"
-				break
-			fi
-		done < <(echo "$includes")
-	done < "includes"
-fi
+while read -r Idir; do
+	if [ ${include_dir_used["$Idir"]} -eq 1 ]; then
+		Is="$Is -I\"$Idir\""
+	fi
+done < "includes"
 
-if [ -f "libs" ]; then
-	while read -r lib_dir; do
-		while read -r hh; do
-			libstem=${hh%.*}
-			hits=$(find "$lib_dir" -regextype posix-extended -regex '.*/(lib)?'"$libstem"'[.](o|so|a)')
-			if [ "$hits" != "" ] && [ $(echo "$hits" | wc -l) -eq 1 ]; then
-				Ls="$Ls -L${lib_dir}"
-				libs="$libs -l:$(basename "${hits}")"
-				break
-			fi
-		done < <(echo "$includes")
-	done < "libs"
-fi
+while read -r Ldir; do
+	if [ ${lib_dir_used["$Ldir"]} -eq 1 ]; then
+		Ls="$Ls -L\"$Ldir\""
+	fi
+done < "libs"
 
-echo $Is $Ls $libs
+while read -r lib; do
+	libstem="${lib%.*}"
+	if [ "${lib_files["$libstem"]}" != "0" ]; then
+		libs="$libs -l:${lib_files["$libstem"]}"
+	fi
+done <<< "$includes"
+
+echo "$Is $Ls $libs"
