@@ -71,29 +71,24 @@ while read -r Ldir; do
 done < "libs"
 
 #####################################################################################################
-#assemble options -I -L -l to be passed to the compiler
-
-Is=""
-Ls=""
-libs=""
+#print options -I -L -l to be passed to the compiler
 
 while read -r Idir; do
 	if [ ${include_dir_used["$Idir"]} -eq 1 ]; then
-		Is="$Is -I\"$Idir\""
+		printf '%s\0' -I"$Idir"
 	fi
 done < "includes"
 
 while read -r Ldir; do
 	if [ ${lib_dir_used["$Ldir"]} -eq 1 ]; then
-		Ls="$Ls -L\"$Ldir\""
+		printf '%s\0' -L"$Ldir"
 	fi
 done < "libs"
 
 while read -r lib; do
 	libstem="${lib%.*}"
 	if [ "${lib_files["$libstem"]}" != "0" ]; then
-		libs="$libs -l:${lib_files["$libstem"]}"
+		printf '%s\0' -l:"${lib_files["$libstem"]}"
 	fi
 done <<< "$includes"
 
-echo "$Is $Ls $libs"
