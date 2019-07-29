@@ -75,20 +75,20 @@ done < "libs"
 
 while read -r Idir; do
 	if [ ${include_dir_used["$Idir"]} -eq 1 ]; then
-		printf '%s\0' -I"$Idir"
+		printf '%s\0\n' -I"$Idir"
 	fi
 done < "includes"
 
 while read -r Ldir; do
 	if [ ${lib_dir_used["$Ldir"]} -eq 1 ]; then
-		printf '%s\0' -L"$Ldir"
+		printf '%s\0\n' -L"$Ldir"
 	fi
 done < "libs"
 
 while read -r lib; do
 	libstem="${lib%.*}"
 	if [ "${lib_files["$libstem"]}" != "0" ]; then
-		printf '%s\0' -l:"${lib_files["$libstem"]}"
+		printf '%s\0\n' -l:"${lib_files["$libstem"]}"
 	fi
 done <<< "$includes"
 
